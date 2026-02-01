@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLICE GAME</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #00f3ff;
+            --secondary-color: #0a0a0a;
+            --alert-color: #ff003c;
+            --warning-color: #ffcc00;
+            --glass: rgba(10, 10, 10, 0.9);
+        }
+
+        body {
+            margin: 0; background: #000; color: var(--primary-color);
+            font-family: 'Share Tech Mono', monospace; height: 100vh; overflow: hidden;
+        }
+
+        /* Scanlines */
+        body::before {
+            content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 10; background-size: 100% 2px, 3px 100%; pointer-events: none;
+        }
+
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000;
+        }
+
+        #main-interface { display: none; height: 100vh; grid-template-columns: 260px 1fr; grid-template-rows: 60px 1fr; }
+
+        header { grid-column: 1/-1; background: var(--glass); border-bottom: 2px solid var(--primary-color); display: flex; align-items: center; padding: 0 20px; justify-content: space-between; z-index: 20; }
+
+        aside { background: rgba(0, 0, 0, 0.8); border-right: 1px solid var(--primary-color); padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+
+        main { padding: 30px; overflow-y: auto; background: rgba(5, 5, 5, 0.9); }
+
+        .section { display: none; animation: fadeIn 0.4s ease; }
+        .section.active { display: block; }
+
+        .cyber-input, .cyber-select {
+            width: 100%; background: rgba(0, 243, 255, 0.05); border: 1px solid var(--primary-color);
+            color: #fff; padding: 12px; margin-bottom: 15px; font-family: 'Share Tech Mono'; outline: none;
+        }
+
+        .cyber-btn {
+            background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color);
+            padding: 10px 20px; cursor: pointer; font-family: 'Orbitron'; transition: 0.2s;
+        }
+        .cyber-btn:hover { background: var(--primary-color); color: #000; box-shadow: 0 0 15px var(--primary-color); }
+
+        /* Status Buttons */
+        .status-group { display: flex; gap: 10px; margin-bottom: 15px; }
+        .status-btn { 
+            flex: 1; padding: 10px; border: 1px solid #333; cursor: pointer; text-align: center; opacity: 0.5;
+        }
+        .status-btn.active[data-status="clean"] { background: #00ff88; color: #000; opacity: 1; border-color: #00ff88; }
+        .status-btn.active[data-status="wanted"] { background: var(--alert-color); color: #fff; opacity: 1; border-color: var(--alert-color); }
+
+        /* Results & Cards */
+        .result-card {
+            border: 1px solid var(--primary-color); background: rgba(0,0,0,0.5);
+            padding: 15px; margin-bottom: 15px; display: flex; gap: 20px; position: relative;
+        }
+        .wanted-border { border: 2px solid var(--alert-color) !important; box-shadow: inset 0 0 15px rgba(255,0,60,0.2); }
+
+        .photo-frame { width: 130px; height: 130px; border: 1px solid var(--primary-color); object-fit: cover; }
+
+        /* Stars */
+        .stars { color: var(--warning-color); font-size: 1.2rem; }
+
+        /* Suggestions for 911 */
+        .suggestions {
+            position: absolute; background: #111; border: 1px solid var(--primary-color);
+            width: calc(100% - 30px); z-index: 100; max-height: 150px; overflow-y: auto; display: none;
+        }
+        .suggestion-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #222; }
+        .suggestion-item:hover { background: var(--primary-color); color: #000; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .logo-text { font-family: 'Orbitron'; font-size: 2.5rem; text-shadow: 0 0 10px var(--primary-color); margin-bottom: 20px; }
+        
+        /* Notification */
+        .notification {
+            position: fixed; top: 20px; right: 20px; background: var(--primary-color); 
+            color: #000; padding: 10px 20px; border-radius: 4px; z-index: 1000;
+            font-family: 'Share Tech Mono'; box-shadow: 0 0 15px var(--primary-color);
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="logo-text">SYSTEM ACCESS</div>
+        <input type="password" id="access-code" class="cyber-input" style="width: 250px; text-align: center;" placeholder="PASSWORD">
+        <button class="cyber-btn" onclick="checkLogin()">LOGIN</button>
+    </div>
+
+    <div id="main-interface">
+        <header>
+            <div style="font-family: 'Orbitron'; font-weight: bold;">POLICE</div>
+            <div id="clock">00:00:00</div>
+        </header>
+
+        <aside>
+            <button class="cyber-btn" onclick="showSection('search')">ПОШУК</button>
+            <button class="cyber-btn" onclick="showSection('add')">ДОДАТИ/РЕД</button>
+            <button class="cyber-btn" onclick="showSection('911')" style="color: var(--alert-color); border-color: var(--alert-color);">911 ВИКЛИКИ</button>
+            <button class="cyber-btn" onclick="exportData()" style="margin-top: auto; border-color: #00ff88; color: #00ff88;">ЕКСПОРТ</button>
+            <button class="cyber-btn" onclick="importData()" style="border-color: #ffcc00; color: #ffcc00;">ІМПОРТ</button>
+        </aside>
+
+        <main>
+            <div id="search" class="section active">
+                <h2>БАЗА ДАНИХ ЦИВІЛЬНИХ</h2>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <input type="text" id="search-input" class="cyber-input" placeholder="Ім'я або Номер авто..." onkeyup="renderDatabase(this.value)" style="flex: 1;">
+                    <button class="cyber-btn" onclick="clearAllData()" style="border-color: var(--alert-color); color: var(--alert-color); white-space: nowrap;">ОЧИСТИТИ БАЗУ</button>
+                </div>
+                <div id="results-container"></div>
+            </div>
+
+            <div id="add" class="section">
+                <h2 id="form-title">РЕЄСТРАЦІЯ У БАЗІ</h2>
+                <div style="max-width: 600px;">
+                    <input type="hidden" id="edit-id">
+                    
+                    <input type="text" id="new-name" class="cyber-input" placeholder="ПІБ">
+                    <input type="text" id="new-age" class="cyber-input" placeholder="Вік">
+                    
+                    <label>СТАТУС:</label>
+                    <div class="status-group">
+                        <div class="status-btn active" data-status="clean" onclick="setStatus('clean')">CLEAN</div>
+                        <div class="status-btn" data-status="wanted" onclick="setStatus('wanted')">WANTED</div>
+                    </div>
+
+                    <div id="stars-wrap" style="display: none; margin-bottom: 15px;">
+                        <label>РІВЕНЬ РОЗШУКУ (ЗІРКИ):</label>
+                        <select id="new-stars" class="cyber-select">
+                            <option value="1">⭐ (1)</option>
+                            <option value="2">⭐⭐ (2)</option>
+                            <option value="3">⭐⭐⭐ (3)</option>
+                            <option value="4">⭐⭐⭐⭐ (4)</option>
+                            <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                        </select>
+                    </div>
+
+                    <textarea id="new-desc" class="cyber-input" placeholder="Опис / Особливі прикмети" rows="3"></textarea>
+                    
+                    <input type="text" id="new-car-model" class="cyber-input" placeholder="Автомобіль (Модель)">
+                    <input type="text" id="new-car-plate" class="cyber-input" placeholder="Номерний знак">
+
+                    <label class="cyber-btn" style="display: block; text-align: center; margin-bottom: 15px;">
+                        📸 ВИБРАТИ ФОТО
+                        <input type="file" id="photo-file" hidden onchange="handlePhoto(this)">
+                    </label>
+                    <img id="add-preview" style="width: 100px; display: none; margin-bottom: 15px; border: 1px solid var(--primary-color);">
+
+                    <button class="cyber-btn" onclick="saveData()">ЗБЕРЕГТИ В БАЗУ</button>
+                    <button class="cyber-btn" onclick="clearForm()">СКИДАННЯ</button>
+                </div>
+            </div>
+
+            <div id="911" class="section">
+                <h2>ДИСПЕТЧЕР 911</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <div style="position: relative;">
+                        <h3>НОВИЙ ВИКЛИК</h3>
+                        <input type="text" id="call-name" class="cyber-input" placeholder="Ім'я заявника..." onkeyup="handleCallSearch(this.value)">
+                        <div id="call-suggestions" class="suggestions"></div>
+                        
+                        <input type="text" id="call-loc" class="cyber-input" placeholder="Локація">
+                        <textarea id="call-reason" class="cyber-input" placeholder="Що трапилось?"></textarea>
+                        <button class="cyber-btn" onclick="submitCall()">ВІДПРАВИТИ ЮНІТ</button>
+                    </div>
+                    <div>
+                        <h3>АКТИВНІ ВИКЛИКИ</h3>
+                        <div id="calls-list"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let db = [];
+        let calls = [];
+        let currentStatus = "clean";
+        let base64Photo = "";
+
+        // Функції для роботи з localStorage
+        function loadFromStorage() {
+            const savedDB = localStorage.getItem('police_database');
+            const savedCalls = localStorage.getItem('police_calls');
+            
+            if(savedDB) {
+                try {
+                    db = JSON.parse(savedDB);
+                } catch(e) {
+                    db = [];
+                    showNotification("Помилка завантаження бази даних", "error");
+                }
+            }
+            
+            if(savedCalls) {
+                try {
+                    calls = JSON.parse(savedCalls);
+                } catch(e) {
+                    calls = [];
+                }
+            }
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem('police_database', JSON.stringify(db));
+                localStorage.setItem('police_calls', JSON.stringify(calls));
+            } catch(e) {
+                showNotification("Помилка збереження даних. Можливо, мало місця.", "error");
+            }
+        }
+
+        function showNotification(message, type = "success") {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            notification.style.background = type === "error" ? "var(--alert-color)" : "var(--primary-color)";
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        function checkLogin() {
+            if(document.getElementById('access-code').value === 'z7JK92mn89p') {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('main-interface').style.display = 'grid';
+                loadFromStorage();
+                renderDatabase();
+                renderCalls();
+                showNotification("Система завантажена. Дані відновлено.");
+            } else {
+                alert("Невірний пароль!");
+            }
+        }
+
+        function showSection(id) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function setStatus(s) {
+            currentStatus = s;
+            document.querySelectorAll('.status-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`[data-status="${s}"]`).classList.add('active');
+            document.getElementById('stars-wrap').style.display = (s === 'wanted') ? 'block' : 'none';
+        }
+
+        function handlePhoto(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    base64Photo = e.target.result;
+                    document.getElementById('add-preview').src = e.target.result;
+                    document.getElementById('add-preview').style.display = 'block';
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function saveData() {
+            const id = document.getElementById('edit-id').value;
+            const data = {
+                id: id || Date.now(),
+                name: document.getElementById('new-name').value,
+                age: document.getElementById('new-age').value,
+                status: currentStatus,
+                stars: (currentStatus === 'wanted') ? document.getElementById('new-stars').value : 0,
+                desc: document.getElementById('new-desc').value,
+                car: document.getElementById('new-car-model').value,
+                plate: document.getElementById('new-car-plate').value.toUpperCase(),
+                photo: base64Photo || 'https://via.placeholder.com/150/000/00f3ff?text=NO+PHOTO'
+            };
+
+            if(!data.name) return alert("Ім'я обов'язкове!");
+
+            if(id) {
+                const idx = db.findIndex(p => p.id == id);
+                db[idx] = data;
+                showNotification("Запис оновлено!");
+            } else {
+                db.push(data);
+                showNotification("Новий запис додано!");
+            }
+
+            clearForm();
+            renderDatabase();
+            saveToStorage();
+            showSection('search');
+        }
+
+        function clearForm() {
+            document.getElementById('edit-id').value = "";
+            document.getElementById('new-name').value = "";
+            document.getElementById('new-age').value = "";
+            document.getElementById('new-desc').value = "";
+            document.getElementById('new-car-model').value = "";
+            document.getElementById('new-car-plate').value = "";
+            document.getElementById('photo-file').value = "";
+            document.getElementById('add-preview').style.display = "none";
+            base64Photo = "";
+            setStatus('clean');
+        }
+
+        function renderDatabase(filter = "") {
+            const container = document.getElementById('results-container');
+            container.innerHTML = "";
+            const query = filter.toLowerCase();
+
+            db.forEach(p => {
+                if(p.name.toLowerCase().includes(query) || p.plate.toLowerCase().includes(query) || 
+                   p.car.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) {
+                    let starIcons = "⭐".repeat(p.stars);
+                    let cardClass = p.status === 'wanted' ? 'result-card wanted-border' : 'result-card';
+                    
+                    container.innerHTML += `
+                        <div class="${cardClass}">
+                            <div style="position:absolute; right:10px; top:10px;">
+                                <button class="cyber-btn" onclick="editEntry(${p.id})">✏️</button>
+                                <button class="cyber-btn" onclick="deleteEntry(${p.id})" style="border-color:red; color:red;">🗑️</button>
+                            </div>
+                            <img src="${p.photo}" class="photo-frame" onerror="this.src='https://via.placeholder.com/150/000/00f3ff?text=NO+PHOTO'">
+                            <div>
+                                <h3 style="margin:0; color:${p.status === 'wanted' ? 'var(--alert-color)' : 'var(--primary-color)'}">
+                                    ${p.name} ${p.status === 'wanted' ? '<span class="stars">'+starIcons+'</span>' : ''}
+                                </h3>
+                                <p>ВІК: ${p.age} | СТАТУС: ${p.status.toUpperCase()}</p>
+                                <p><strong>ПРИКМЕТИ:</strong> ${p.desc || 'Немає'}</p>
+                                <p><strong>АВТО:</strong> ${p.car || 'Немає'} [${p.plate || 'БЕЗ НОМЕРІВ'}]</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+        }
+
+        function editEntry(id) {
+            const p = db.find(x => x.id == id);
+            if(!p) return;
+            
+            showSection('add');
+            document.getElementById('edit-id').value = p.id;
+            document.getElementById('new-name').value = p.name;
+            document.getElementById('new-age').value = p.age;
+            document.getElementById('new-desc').value = p.desc || '';
+            document.getElementById('new-car-model').value = p.car || '';
+            document.getElementById('new-car-plate').value = p.plate || '';
+            
+            if(p.photo && p.photo.startsWith('data:image')) {
+                base64Photo = p.photo;
+                document.getElementById('add-preview').src = p.photo;
+                document.getElementById('add-preview').style.display = 'block';
+            } else {
+                base64Photo = '';
+                document.getElementById('add-preview').style.display = 'none';
+            }
+            
+            setStatus(p.status);
+            if(p.status === 'wanted') document.getElementById('new-stars').value = p.stars;
+        }
+
+        function deleteEntry(id) {
+            if(confirm("Ви впевнені, що хочете видалити цей запис?")) {
+                db = db.filter(x => x.id != id);
+                renderDatabase();
+                saveToStorage();
+                showNotification("Запис видалено");
+            }
+        }
+
+        function clearAllData() {
+            if(confirm("Ця дія видалить ВСІ дані з бази. Продовжити?") && 
+               confirm("Це останнє попередження. Всі записи будуть втрачені!")) {
+                db = [];
+                localStorage.removeItem('police_database');
+                renderDatabase();
+                showNotification("Всю базу даних очищено", "error");
+            }
+        }
+
+        // --- 911 SMART LOGIC ---
+        function handleCallSearch(val) {
+            const sugBox = document.getElementById('call-suggestions');
+            if(!val) { sugBox.style.display = 'none'; return; }
+            
+            const matches = db.filter(p => p.name.toLowerCase().includes(val.toLowerCase()));
+            if(matches.length > 0) {
+                sugBox.innerHTML = matches.map(p => 
+                    `<div class="suggestion-item" onclick="fillCall('${p.name.replace(/'/g, "\\'")}')">
+                        ${p.name} (${p.status === 'wanted' ? 'РОЗШУК' : 'ЧИСТИЙ'})
+                    </div>`
+                ).join('');
+                sugBox.style.display = 'block';
+            } else {
+                sugBox.style.display = 'none';
+            }
+        }
+
+        function fillCall(name) {
+            document.getElementById('call-name').value = name;
+            document.getElementById('call-suggestions').style.display = 'none';
+        }
+
+        function submitCall() {
+            const name = document.getElementById('call-name').value;
+            const loc = document.getElementById('call-loc').value;
+            const reason = document.getElementById('call-reason').value;
+            if(!loc || !reason) return alert("Заповніть локацію та причину!");
+
+            calls.unshift({ 
+                id: Date.now(), 
+                name, 
+                loc, 
+                reason, 
+                time: new Date().toLocaleTimeString(),
+                date: new Date().toLocaleDateString()
+            });
+            
+            renderCalls();
+            saveToStorage();
+            document.getElementById('call-name').value = "";
+            document.getElementById('call-loc').value = "";
+            document.getElementById('call-reason').value = "";
+            showNotification("Виклик зареєстровано!");
+        }
+
+        function renderCalls() {
+            const container = document.getElementById('calls-list');
+            if(calls.length === 0) {
+                container.innerHTML = '<p style="text-align: center; opacity: 0.7;">Активних викликів немає</p>';
+                return;
+            }
+            
+            container.innerHTML = calls.map(c => `
+                <div style="border: 1px solid var(--alert-color); padding: 10px; margin-bottom: 10px; background: rgba(255,0,0,0.1);">
+                    <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                        <span>🚨 ВИКЛИК</span> <span>${c.date} ${c.time}</span>
+                    </div>
+                    <p><strong>ЗАЯВНИК:</strong> ${c.name}</p>
+                    <p><strong>ЛОКАЦІЯ:</strong> ${c.loc}</p>
+                    <p><strong>ПРИЧИНА:</strong> ${c.reason}</p>
+                    <button class="cyber-btn" onclick="closeCall(${c.id})">ПРИЙНЯТИ</button>
+                </div>
+            `).join('');
+        }
+
+        function closeCall(id) {
+            calls = calls.filter(c => c.id != id);
+            renderCalls();
+            saveToStorage();
+            showNotification("Виклик закрито");
+        }
+
+        // Експорт/Імпорт даних
+        function exportData() {
+            const data = {
+                database: db,
+                calls: calls,
+                exportDate: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `police_data_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showNotification("Дані експортовано у файл");
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if(!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        
+                        if(confirm(`Знайдено ${importedData.database?.length || 0} записів. Замінити поточні дані?`)) {
+                            if(importedData.database) db = importedData.database;
+                            if(importedData.calls) calls = importedData.calls;
+                            
+                            saveToStorage();
+                            renderDatabase();
+                            renderCalls();
+                            showNotification("Дані успішно імпортовано!");
+                        }
+                    } catch(error) {
+                        alert("Помилка при читанні файлу: " + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // Годинник
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+        }, 1000);
+
+        // Автозбереження кожні 30 секунд
+        setInterval(() => {
+            if(db.length > 0 || calls.length > 0) {
+                saveToStorage();
+            }
+        }, 30000);
+
+        // Спроба завантажити дані при завантаженні сторінки
+        window.addEventListener('load', () => {
+            loadFromStorage();
+        });
+    </script>
+</body>
+</html>
